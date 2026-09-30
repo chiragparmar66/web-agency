@@ -69,4 +69,3 @@ backend/studio.db
 *.tsbuildinfo
 
 # Accidental/generated files
-frontend/k.startsWith('motion')
