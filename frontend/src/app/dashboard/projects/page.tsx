@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, FolderOpen, Plus } from "lucide-react";
+import { motion } from "motion/react";
 import { api } from "@/lib/api";
 import { ProjectItem } from "@/types";
+import { fadeUpVariants, cardHoverProps, staggerContainerVariants } from "@/lib/motion";
 
 const STATUS_LABELS: Record<string, string> = {
   LEAD: "Lead",
   NEW: "New",
   REQUIREMENTS_PENDING: "Requirements Pending",
+  PENDING_APPROVAL: "Pending Approval",
+  BUILDING: "Building Website",
   IN_PROGRESS: "In Progress",
   DESIGN_REVIEW: "Design Review",
   DEVELOPMENT: "Development",
@@ -25,6 +29,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-blue-50 text-blue-700",
   REQUIREMENTS_PENDING: "bg-amber-50 text-amber-700",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-700",
+  BUILDING: "bg-violet-50 text-violet-700",
   IN_PROGRESS: "bg-indigo-50 text-indigo-700",
   DESIGN_REVIEW: "bg-purple-50 text-purple-700",
   DEVELOPMENT: "bg-indigo-50 text-indigo-700",
@@ -70,9 +76,17 @@ export default function ProjectsListPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={staggerContainerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <motion.div
+        variants={fadeUpVariants}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">My Projects</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -86,7 +100,7 @@ export default function ProjectsListPage() {
           <Plus className="h-3.5 w-3.5" />
           New Project
         </Link>
-      </div>
+      </motion.div>
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -95,7 +109,10 @@ export default function ProjectsListPage() {
       )}
 
       {!loading && !error && !projects.length && (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
+        <motion.div
+          variants={fadeUpVariants}
+          className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center"
+        >
           <FolderOpen className="h-10 w-10 text-slate-300 mx-auto mb-4" />
           <h2 className="text-sm font-bold text-slate-800">No projects yet</h2>
           <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
@@ -108,49 +125,54 @@ export default function ProjectsListPage() {
             <Plus className="h-3.5 w-3.5" />
             Start Your First Project
           </Link>
-        </div>
+        </motion.div>
       )}
 
       {/* Project list */}
       {projects.length > 0 && (
-        <div className="space-y-3">
+        <motion.div variants={staggerContainerVariants} className="space-y-3">
           {projects.map((project) => {
             const statusLabel = STATUS_LABELS[project.status] ?? project.status;
             const statusColor = STATUS_COLORS[project.status] ?? "bg-slate-100 text-slate-600";
             return (
-              <Link
+              <motion.div
                 key={project.id}
-                href={`/dashboard/projects/${project.id}`}
-                className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-5 hover:shadow-md transition-shadow"
+                variants={fadeUpVariants}
+                {...cardHoverProps}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-slate-900 text-white font-bold text-xs">
-                  {project.title.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-bold text-slate-900 truncate">{project.title}</p>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
-                    >
-                      {statusLabel}
-                    </span>
+                <Link
+                  href={`/dashboard/projects/${project.id}`}
+                  className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-5 hover:shadow-md transition-shadow block"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-slate-900 text-white font-bold text-xs">
+                    {project.title.charAt(0).toUpperCase()}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{project.business_name}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                    {project.project_number}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <p className="text-[10px] text-slate-400">
-                    {new Date(project.updated_at).toLocaleDateString("en-IN")}
-                  </p>
-                  <ArrowRight className="h-4 w-4 text-slate-300" />
-                </div>
-              </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900 truncate">{project.title}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusColor}`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{project.business_name}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                      {project.project_number}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <p className="text-[10px] text-slate-400">
+                      {new Date(project.updated_at).toLocaleDateString("en-IN")}
+                    </p>
+                    <ArrowRight className="h-4 w-4 text-slate-300" />
+                  </div>
+                </Link>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

@@ -132,7 +132,12 @@ export default function ServicesPage() {
         {/* Page Header */}
         <section className="border-b border-slate-200 bg-white py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl">
+            <motion.div
+              variants={fadeUpVariants}
+              initial="hidden"
+              animate="visible"
+              className="max-w-3xl"
+            >
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
                 Our Capabilities
               </span>
@@ -142,7 +147,7 @@ export default function ServicesPage() {
               <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed">
                 We build real, bespoke web solutions for businesses that value craftsmanship, speed, and reliability. Every website is built from scratch by our engineers with clean, deterministic code.
               </p>
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -153,10 +158,15 @@ export default function ServicesPage() {
               {serviceList.map((service) => {
                 const IconComponent = service.icon;
                 return (
-                  <div
+                  <motion.div
                     key={service.id}
                     id={service.id}
-                    className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-8 sm:p-10 shadow-sm transition-all hover:border-slate-300"
+                    variants={fadeUpVariants}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={VIEWPORT_ONCE}
+                    {...cardHoverProps}
+                    className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-8 sm:p-10 shadow-sm transition-all hover:border-slate-300 hover:shadow-md"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
                       {/* Left: Service Info */}
@@ -218,7 +228,7 @@ export default function ServicesPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>

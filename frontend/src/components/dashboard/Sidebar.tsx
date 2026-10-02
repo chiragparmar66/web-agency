@@ -8,6 +8,7 @@ import {
   LogOut,
   PlusCircle,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { authStorage } from "@/lib/auth";
 import { User } from "@/types";
@@ -26,6 +27,8 @@ export default function Sidebar({ user, onCloseMobile }: SidebarProps) {
     router.push("/login");
   };
 
+  const isStaff = user?.role === "ADMIN" || user?.role === "DEVELOPER";
+
   const navItems = [
     {
       name: "Overview",
@@ -37,6 +40,15 @@ export default function Sidebar({ user, onCloseMobile }: SidebarProps) {
       href: "/dashboard/projects",
       icon: Globe,
     },
+    ...(isStaff
+      ? [
+          {
+            name: "Studio Console",
+            href: "/dashboard/admin",
+            icon: ShieldCheck,
+          },
+        ]
+      : []),
     {
       name: "Account Settings",
       href: "/dashboard/settings",

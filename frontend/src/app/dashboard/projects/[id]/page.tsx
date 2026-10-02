@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, ExternalLink } from "lucide-react";
@@ -14,11 +14,16 @@ import {
   buttonPressProps,
   alertVariants,
 } from "@/lib/motion";
+import ProjectFiles from "@/components/dashboard/ProjectFiles";
+import ProjectRevisions from "@/components/dashboard/ProjectRevisions";
+import ProjectBilling from "@/components/dashboard/ProjectBilling";
 
 const STATUS_LABELS: Record<string, string> = {
   LEAD: "Lead",
   NEW: "New",
   REQUIREMENTS_PENDING: "Requirements Pending",
+  PENDING_APPROVAL: "Pending Approval",
+  BUILDING: "Building Website",
   IN_PROGRESS: "In Progress",
   DESIGN_REVIEW: "Design Review",
   DEVELOPMENT: "Development",
@@ -34,6 +39,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-blue-50 text-blue-700",
   REQUIREMENTS_PENDING: "bg-amber-50 text-amber-700",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-700",
+  BUILDING: "bg-violet-50 text-violet-700",
   IN_PROGRESS: "bg-indigo-50 text-indigo-700",
   DESIGN_REVIEW: "bg-purple-50 text-purple-700",
   DEVELOPMENT: "bg-indigo-50 text-indigo-700",
@@ -50,6 +57,8 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUS_PIPELINE = [
   "NEW",
   "REQUIREMENTS_PENDING",
+  "PENDING_APPROVAL",
+  "BUILDING",
   "IN_PROGRESS",
   "DESIGN_REVIEW",
   "DEVELOPMENT",
@@ -69,24 +78,25 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!projectId) return;
-    const load = async () => {
-      try {
-        const res = await api.get<ProjectDetail>(`/projects/${projectId}`);
-        if (res.success && res.data) {
-          setProject(res.data);
-        } else {
-          setError("Project not found.");
-        }
-      } catch {
-        setError("Could not load project details.");
-      } finally {
-        setLoading(false);
+    try {
+      const res = await api.get<ProjectDetail>(`/projects/${projectId}`);
+      if (res.success && res.data) {
+        setProject(res.data);
+      } else {
+        setError("Project not found.");
       }
-    };
-    load();
+    } catch {
+      setError("Could not load project details.");
+    } finally {
+      setLoading(false);
+    }
   }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) {
     return (
@@ -371,6 +381,30 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
+      </motion.div>
+
+      {/* Project Assets & Files */}
+      <motion.div variants={fadeUpVariants}>
+        <ProjectFiles projectId={project.id} />
+      </motion.div>
+
+      {/* Project Billing & Invoices */}
+      <motion.div variants={fadeUpVariants}>
+        <ProjectBilling
+          projectId={project.id}
+          projectStatus={project.status}
+          onPaymentSuccess={load}
+        />
+      </motion.div>
+
+      {/* Project Revisions & Feedback */}
+      <motion.div variants={fadeUpVariants}>
+        <ProjectRevisions
+          projectId={project.id}
+          projectStatus={project.status}
+          revisionsUsed={project.revisions_used}
+          onRevisionSubmitted={load}
+        />
       </motion.div>
     </motion.div>
   );

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
@@ -8,8 +10,15 @@ import {
   ShieldCheck,
   Target,
 } from "lucide-react";
+import { motion } from "motion/react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import {
+  fadeUpVariants,
+  cardHoverProps,
+  VIEWPORT_ONCE,
+  staggerContainerVariants,
+} from "@/lib/motion";
 
 export default function AboutPage() {
   const values = [
@@ -47,7 +56,12 @@ export default function AboutPage() {
         {/* Header */}
         <section className="border-b border-slate-200 bg-white py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl">
+            <motion.div
+              variants={fadeUpVariants}
+              initial="hidden"
+              animate="visible"
+              className="max-w-3xl"
+            >
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
                 About Nexus Studio
               </span>
@@ -57,7 +71,7 @@ export default function AboutPage() {
               <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed">
                 Founded with a clear principle: Indian businesses deserve clean, custom-crafted digital presence engineered by experienced developers, not synthetic templates or marketing gimmicks.
               </p>
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -65,7 +79,12 @@ export default function AboutPage() {
         <section className="py-16 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-              <div>
+              <motion.div
+                variants={fadeUpVariants}
+                initial="hidden"
+                whileInView="visible"
+                viewport={VIEWPORT_ONCE}
+              >
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-snug">
                   Why we reject &quot;instant website builders&quot; and build custom digital architecture.
                 </h2>
@@ -96,10 +115,16 @@ export default function AboutPage() {
                     Explore Service Capabilities
                   </Link>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Trust Box */}
-              <div className="rounded-lg border border-slate-200 bg-white p-8 shadow-sm space-y-6">
+              <motion.div
+                variants={fadeUpVariants}
+                initial="hidden"
+                whileInView="visible"
+                viewport={VIEWPORT_ONCE}
+                className="rounded-lg border border-slate-200 bg-white p-8 shadow-sm space-y-6"
+              >
                 <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
                   <div className="flex h-10 w-10 items-center justify-center rounded bg-blue-50 text-blue-600">
                     <ShieldCheck className="h-6 w-6" />
@@ -144,7 +169,7 @@ export default function AboutPage() {
                     </div>
                   </li>
                 </ul>
-              </div>
+              </motion.div>
             </div>
           </div>
         </section>
@@ -152,22 +177,33 @@ export default function AboutPage() {
         {/* Studio Values */}
         <section className="bg-white border-t border-slate-200 py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-2xl mb-12">
+            <motion.div
+              variants={fadeUpVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={VIEWPORT_ONCE}
+              className="max-w-2xl mb-12"
+            >
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
                 Guiding Principles
               </span>
               <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
                 How we engineer software
               </h2>
-            </div>
+            </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {values.map((v) => {
                 const IconComponent = v.icon;
                 return (
-                  <div
+                  <motion.div
                     key={v.title}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-6 flex flex-col justify-between"
+                    variants={fadeUpVariants}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={VIEWPORT_ONCE}
+                    {...cardHoverProps}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-6 flex flex-col justify-between hover:border-slate-300 transition-colors"
                   >
                     <div>
                       <div className="flex h-9 w-9 items-center justify-center rounded bg-slate-900 text-white mb-4">
@@ -180,7 +216,7 @@ export default function AboutPage() {
                         {v.description}
                       </p>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>

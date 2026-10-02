@@ -13,10 +13,17 @@ import {
   Send,
 } from "lucide-react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { api, ApiError } from "@/lib/api";
 import { APP_CONFIG } from "@/lib/constants";
+import {
+  fadeUpVariants,
+  alertVariants,
+  buttonPressProps,
+  VIEWPORT_ONCE,
+} from "@/lib/motion";
 
 function ContactForm() {
   const searchParams = useSearchParams();
@@ -80,7 +87,12 @@ function ContactForm() {
         {/* Header */}
         <section className="border-b border-slate-200 bg-white py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl">
+            <motion.div
+              variants={fadeUpVariants}
+              initial="hidden"
+              animate="visible"
+              className="max-w-3xl"
+            >
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
                 Contact & Inquiries
               </span>
@@ -90,7 +102,7 @@ function ContactForm() {
               <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed">
                 Whether you need a bespoke corporate website, high-converting landing page, or complex custom web application, our engineers are ready to discuss your specifications.
               </p>
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -99,7 +111,13 @@ function ContactForm() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
               {/* Form Column */}
-              <div className="lg:col-span-7 bg-white rounded-lg border border-slate-200 p-8 sm:p-10 shadow-sm">
+              <motion.div
+                variants={fadeUpVariants}
+                initial="hidden"
+                whileInView="visible"
+                viewport={VIEWPORT_ONCE}
+                className="lg:col-span-7 bg-white rounded-lg border border-slate-200 p-8 sm:p-10 shadow-sm"
+              >
                 <h2 className="text-xl font-bold text-slate-900 mb-2">
                   Project Inquiry Form
                 </h2>
@@ -107,32 +125,55 @@ function ContactForm() {
                   Fill in your project essentials below. We reply with initial architectural thoughts within 1 business day.
                 </p>
 
-                {success ? (
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-8 text-center space-y-4">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                      <CheckCircle2 className="h-6 w-6" />
-                    </div>
-                    <h3 className="text-lg font-bold text-emerald-900">
-                      Inquiry Received Successfully
-                    </h3>
-                    <p className="text-xs text-emerald-700 max-w-md mx-auto leading-relaxed">
-                      Thank you for contacting Nexus Studio. An engineer will review your requirements and reach out via email or phone shortly.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setSuccess(false)}
-                      className="mt-4 inline-flex items-center gap-2 rounded bg-emerald-800 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-900"
+                <AnimatePresence mode="wait">
+                  {success ? (
+                    <motion.div
+                      key="success"
+                      variants={alertVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      className="rounded-lg bg-emerald-50 border border-emerald-200 p-8 text-center space-y-4"
                     >
-                      Submit Another Inquiry
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleSubmit} className="space-y-6 text-sm">
-                    {errorMessage && (
-                      <div className="rounded bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-700 font-medium">
-                        {errorMessage}
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                        <CheckCircle2 className="h-6 w-6" />
                       </div>
-                    )}
+                      <h3 className="text-lg font-bold text-emerald-900">
+                        Inquiry Received Successfully
+                      </h3>
+                      <p className="text-xs text-emerald-700 max-w-md mx-auto leading-relaxed">
+                        Thank you for contacting Nexus Studio. An engineer will review your requirements and reach out via email or phone shortly.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setSuccess(false)}
+                        className="mt-4 inline-flex items-center gap-2 rounded bg-emerald-800 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-900"
+                      >
+                        Submit Another Inquiry
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.form
+                      key="form"
+                      variants={fadeUpVariants}
+                      initial="hidden"
+                      animate="visible"
+                      onSubmit={handleSubmit}
+                      className="space-y-6 text-sm"
+                    >
+                      <AnimatePresence>
+                        {errorMessage && (
+                          <motion.div
+                            variants={alertVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className="rounded bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-700 font-medium"
+                          >
+                            {errorMessage}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
@@ -253,9 +294,11 @@ function ContactForm() {
                       />
                     </div>
 
-                    <button
+                    <motion.button
                       type="submit"
                       disabled={loading}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
                       className="w-full inline-flex items-center justify-center gap-2 rounded bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors shadow-sm"
                     >
                       {loading ? (
@@ -266,13 +309,20 @@ function ContactForm() {
                           <span>Submit Project Inquiry</span>
                         </>
                       )}
-                    </button>
-                  </form>
+                    </motion.button>
+                  </motion.form>
                 )}
-              </div>
+              </AnimatePresence>
+            </motion.div>
 
-              {/* Sidebar Contact Info */}
-              <div className="lg:col-span-5 space-y-6">
+            {/* Sidebar Contact Info */}
+            <motion.div
+              variants={fadeUpVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={VIEWPORT_ONCE}
+              className="lg:col-span-5 space-y-6"
+            >
                 {/* Fast-track WhatsApp Box */}
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-6 space-y-4">
                   <div className="flex items-center gap-2.5 text-emerald-800 font-bold text-sm">
@@ -356,7 +406,7 @@ function ContactForm() {
                     <span>Sign in to Customer Dashboard &rarr;</span>
                   </Link>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
         </section>

@@ -11,6 +11,8 @@ class ProjectStatus(str, Enum):
     LEAD = "LEAD"
     NEW = "NEW"
     REQUIREMENTS_PENDING = "REQUIREMENTS_PENDING"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    BUILDING = "BUILDING"
     IN_PROGRESS = "IN_PROGRESS"
     DESIGN_REVIEW = "DESIGN_REVIEW"
     DEVELOPMENT = "DEVELOPMENT"
@@ -21,6 +23,14 @@ class ProjectStatus(str, Enum):
     DEPLOYING = "DEPLOYING"
     LIVE = "LIVE"
     COMPLETED = "COMPLETED"
+
+
+class BuildStatus(str, Enum):
+    QUEUED = "QUEUED"
+    ANALYZING = "ANALYZING"
+    GENERATING = "GENERATING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class RevisionStatus(str, Enum):

@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building, Lock, Mail, Phone, ShieldAlert, User } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { api, ApiError } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { fadeUpVariants, alertVariants } from "@/lib/motion";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -66,7 +68,12 @@ export default function RegisterPage() {
       <Navbar />
 
       <main className="flex-1 flex items-center justify-center py-16 px-4 sm:px-6 lg:px-8">
-        <div className="w-full max-w-lg space-y-8 bg-white border border-slate-200 rounded-lg p-8 sm:p-10 shadow-sm">
+        <motion.div
+          variants={fadeUpVariants}
+          initial="hidden"
+          animate="visible"
+          className="w-full max-w-lg space-y-8 bg-white border border-slate-200 rounded-lg p-8 sm:p-10 shadow-sm"
+        >
           <div className="text-center">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded bg-slate-900 text-white font-bold text-sm">
               NX
@@ -79,12 +86,20 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {errorMessage && (
-            <div className="rounded bg-rose-50 border border-rose-200 p-3.5 flex items-start gap-2.5 text-xs text-rose-700">
-              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+          <AnimatePresence mode="wait">
+            {errorMessage && (
+              <motion.div
+                variants={alertVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="rounded bg-rose-50 border border-rose-200 p-3.5 flex items-start gap-2.5 text-xs text-rose-700"
+              >
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                <span>{errorMessage}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form onSubmit={handleRegister} className="space-y-4 text-sm">
             <div>
@@ -192,9 +207,11 @@ export default function RegisterPage() {
             </div>
 
             <div className="pt-2">
-              <button
+              <motion.button
                 type="submit"
                 disabled={loading}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
                 className="w-full inline-flex items-center justify-center gap-2 rounded bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors shadow-sm"
               >
                 {loading ? (
@@ -205,7 +222,7 @@ export default function RegisterPage() {
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
-              </button>
+              </motion.button>
             </div>
           </form>
 
@@ -218,7 +235,7 @@ export default function RegisterPage() {
               Sign In
             </Link>
           </div>
-        </div>
+        </motion.div>
       </main>
 
       <Footer />

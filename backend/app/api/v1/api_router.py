@@ -3,12 +3,15 @@ from app.api.v1.endpoints import (
     admin,
     auth,
     dashboard,
+    files,
     health,
     inquiries,
     messages,
+    payments,
     pricing,
     projects,
     requirements,
+    revisions,
     showcase,
 )
 
@@ -31,5 +34,16 @@ api_router.include_router(
     prefix="/projects/{project_id}/messages",
     tags=["Project Messages"],
 )
+api_router.include_router(
+    files.router,
+    prefix="/projects/{project_id}/files",
+    tags=["Project Files"],
+)
+api_router.include_router(
+    revisions.router,
+    prefix="/projects/{project_id}/revisions",
+    tags=["Project Revisions"],
+)
+api_router.include_router(payments.router, prefix="/payments", tags=["Secure Payments"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Customer Dashboard"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Admin Operations"])

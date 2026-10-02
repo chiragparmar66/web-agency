@@ -39,7 +39,7 @@ export const fadeInVariants: Variants = {
     opacity: 1,
     transition: {
       duration: 0.35,
-      ease: "easeOut",
+      ease: "easeOut" as const,
     },
   },
 };
@@ -60,7 +60,7 @@ export const staggerContainerVariants: Variants = {
 export const cardHoverProps = {
   whileHover: {
     y: -3,
-    transition: { duration: 0.2, ease: "easeOut" },
+    transition: { duration: 0.2, ease: "easeOut" as const },
   },
   whileTap: {
     scale: 0.99,

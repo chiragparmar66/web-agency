@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { api, ApiError } from "@/lib/api";
 import { PricingPackage, ProjectItem } from "@/types";
+import { fadeUpVariants, alertVariants, cardHoverProps } from "@/lib/motion";
 
 const PACKAGES: PricingPackage[] = [
   {
@@ -128,180 +130,212 @@ export default function NewProjectPage() {
         </span>
       </div>
 
-      {/* Step 1: Package Selection */}
-      {step === 1 && (
-        <div className="space-y-4">
-          {PACKAGES.map((pkg) => (
-            <button
-              key={pkg.slug}
-              type="button"
-              onClick={() => setSelectedPackageSlug(pkg.slug)}
-              className={`w-full text-left rounded-lg border p-5 transition-all ${
-                selectedPackageSlug === pkg.slug
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white hover:border-slate-400"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-sm font-bold ${
+      <AnimatePresence mode="wait">
+        {/* Step 1: Package Selection */}
+        {step === 1 && (
+          <motion.div
+            key="step-1"
+            variants={fadeUpVariants}
+            initial="hidden"
+            animate="visible"
+            exit={{ opacity: 0, x: -12, transition: { duration: 0.18 } }}
+            className="space-y-4"
+          >
+            {PACKAGES.map((pkg) => (
+              <motion.button
+                key={pkg.slug}
+                type="button"
+                whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setSelectedPackageSlug(pkg.slug)}
+                className={`w-full text-left rounded-lg border p-5 transition-all ${
+                  selectedPackageSlug === pkg.slug
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white hover:border-slate-400"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-sm font-bold ${
+                          selectedPackageSlug === pkg.slug ? "text-white" : "text-slate-900"
+                        }`}
+                      >
+                        {pkg.name}
+                      </span>
+                      {pkg.is_popular && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            selectedPackageSlug === pkg.slug
+                              ? "bg-white/20 text-white"
+                              : "bg-blue-50 text-blue-700"
+                          }`}
+                        >
+                          Most Popular
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={`mt-1 text-xs ${
+                        selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      {pkg.description}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {pkg.features.map((f) => (
+                        <li key={f} className="flex items-center gap-1.5 text-xs">
+                          <CheckCircle2
+                            className={`h-3.5 w-3.5 shrink-0 ${
+                              selectedPackageSlug === pkg.slug
+                                ? "text-emerald-400"
+                                : "text-emerald-500"
+                            }`}
+                          />
+                          <span
+                            className={
+                              selectedPackageSlug === pkg.slug ? "text-slate-200" : "text-slate-600"
+                            }
+                          >
+                            {f}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`text-xl font-extrabold ${
                         selectedPackageSlug === pkg.slug ? "text-white" : "text-slate-900"
                       }`}
                     >
-                      {pkg.name}
-                    </span>
-                    {pkg.is_popular && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          selectedPackageSlug === pkg.slug
-                            ? "bg-white/20 text-white"
-                            : "bg-blue-50 text-blue-700"
-                        }`}
-                      >
-                        Most Popular
-                      </span>
-                    )}
+                      ₹{pkg.price_inr.toLocaleString("en-IN")}
+                    </p>
+                    <p
+                      className={`text-[10px] ${
+                        selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-400"
+                      }`}
+                    >
+                      {pkg.revisions_included} revision{pkg.revisions_included > 1 ? "s" : ""}
+                    </p>
                   </div>
-                  <p
-                    className={`mt-1 text-xs ${
-                      selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-500"
-                    }`}
-                  >
-                    {pkg.description}
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {pkg.features.map((f) => (
-                      <li key={f} className="flex items-center gap-1.5 text-xs">
-                        <CheckCircle2
-                          className={`h-3.5 w-3.5 shrink-0 ${
-                            selectedPackageSlug === pkg.slug
-                              ? "text-emerald-400"
-                              : "text-emerald-500"
-                          }`}
-                        />
-                        <span
-                          className={
-                            selectedPackageSlug === pkg.slug ? "text-slate-200" : "text-slate-600"
-                          }
-                        >
-                          {f}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p
-                    className={`text-xl font-extrabold ${
-                      selectedPackageSlug === pkg.slug ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    ₹{pkg.price_inr.toLocaleString("en-IN")}
-                  </p>
-                  <p
-                    className={`text-[10px] ${
-                      selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-400"
-                    }`}
-                  >
-                    {pkg.revisions_included} revision{pkg.revisions_included > 1 ? "s" : ""}
-                  </p>
-                </div>
-              </div>
-            </button>
-          ))}
+              </motion.button>
+            ))}
 
-          <button
-            type="button"
-            onClick={() => setStep(2)}
-            className="w-full flex items-center justify-center gap-2 rounded bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.005 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setStep(2)}
+              className="w-full flex items-center justify-center gap-2 rounded bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+            >
+              Continue to Project Details
+              <ArrowRight className="h-4 w-4" />
+            </motion.button>
+          </motion.div>
+        )}
+
+        {/* Step 2: Project Details */}
+        {step === 2 && (
+          <motion.div
+            key="step-2"
+            variants={fadeUpVariants}
+            initial="hidden"
+            animate="visible"
+            exit={{ opacity: 0, x: 12, transition: { duration: 0.18 } }}
+            className="space-y-4"
           >
-            Continue to Project Details
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Step 2: Project Details */}
-      {step === 2 && (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs">
-            <p className="text-slate-500">Selected package:</p>
-            <p className="font-bold text-slate-900">
-              {PACKAGES.find((p) => p.slug === selectedPackageSlug)?.name} —{" "}
-              ₹{(PACKAGES.find((p) => p.slug === selectedPackageSlug)?.price_inr ?? 0).toLocaleString("en-IN")}
-            </p>
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="mt-1 text-blue-600 hover:underline font-semibold"
-            >
-              Change package
-            </button>
-          </div>
-
-          <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Project / Website Title *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Dr. Sharma Clinic Website"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-slate-500 focus:outline-none"
-              />
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs">
+              <p className="text-slate-500">Selected package:</p>
+              <p className="font-bold text-slate-900">
+                {PACKAGES.find((p) => p.slug === selectedPackageSlug)?.name} —{" "}
+                ₹{(PACKAGES.find((p) => p.slug === selectedPackageSlug)?.price_inr ?? 0).toLocaleString("en-IN")}
+              </p>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="mt-1 text-blue-600 hover:underline font-semibold"
+              >
+                Change package
+              </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Business / Brand Name *
-              </label>
-              <input
-                type="text"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="e.g. Sharma Multispecialty Clinic"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-slate-500 focus:outline-none"
-              />
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Project / Website Title *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Dr. Sharma Clinic Website"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Business / Brand Name *
+                </label>
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="e.g. Sharma Multispecialty Clinic"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+                />
+              </div>
             </div>
-          </div>
 
-          {error && (
-            <p className="text-xs text-red-600 font-semibold">{error}</p>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="flex-1 rounded border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex-1 flex items-center justify-center gap-2 rounded bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 transition-colors"
-            >
-              {submitting ? (
-                <>
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                <>
-                  Commission Project
-                  <ArrowRight className="h-4 w-4" />
-                </>
+            <AnimatePresence>
+              {error && (
+                <motion.p
+                  variants={alertVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="text-xs text-red-600 font-semibold"
+                >
+                  {error}
+                </motion.p>
               )}
-            </button>
-          </div>
-        </div>
-      )}
+            </AnimatePresence>
+
+            <div className="flex gap-3">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setStep(1)}
+                className="flex-1 rounded border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Back
+              </motion.button>
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.98 }}
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex-1 flex items-center justify-center gap-2 rounded bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 transition-colors"
+              >
+                {submitting ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating…
+                  </>
+                ) : (
+                  <>
+                    Commission Project
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
     from app.models.project_file import ProjectFile
+    from app.models.website_build import WebsiteBuild
 
 
 class Revision(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -44,4 +45,8 @@ class Revision(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         "ProjectFile",
         back_populates="revision",
         cascade="all, delete-orphan",
+    )
+    builds: Mapped[List["WebsiteBuild"]] = relationship(
+        "WebsiteBuild",
+        back_populates="revision",
     )

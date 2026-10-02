@@ -9,6 +9,8 @@ export const PROJECT_STATUS_LABELS: Record<string, { label: string; color: strin
   LEAD: { label: "Lead Capture", color: "bg-gray-100 text-gray-800" },
   NEW: { label: "Project Created", color: "bg-blue-100 text-blue-800" },
   REQUIREMENTS_PENDING: { label: "Awaiting Requirements", color: "bg-amber-100 text-amber-800" },
+  PENDING_APPROVAL: { label: "Pending Admin Approval", color: "bg-amber-100 text-amber-800" },
+  BUILDING: { label: "AI Website Synthesis", color: "bg-violet-100 text-violet-800" },
   IN_PROGRESS: { label: "In Development", color: "bg-indigo-100 text-indigo-800" },
   DESIGN_REVIEW: { label: "Design Review", color: "bg-purple-100 text-purple-800" },
   DEVELOPMENT: { label: "Engineering & QA", color: "bg-cyan-100 text-cyan-800" },

@@ -3,6 +3,7 @@ SQLAlchemy ORM Models Module
 """
 
 from app.models.enums import (
+    BuildStatus,
     FileCategory,
     InquirySource,
     InquiryStatus,
@@ -24,6 +25,7 @@ from app.models.payment import Payment
 from app.models.activity import ProjectActivity
 from app.models.message import ProjectMessage
 from app.models.showcase import PortfolioProject, Service, Testimonial
+from app.models.website_build import WebsiteBuild
 
 __all__ = [
     "UserRole",
@@ -34,6 +36,7 @@ __all__ = [
     "FileCategory",
     "InquiryStatus",
     "InquirySource",
+    "BuildStatus",
     "User",
     "Customer",
     "Inquiry",
@@ -48,4 +51,5 @@ __all__ = [
     "PortfolioProject",
     "Service",
     "Testimonial",
+    "WebsiteBuild",
 ]
