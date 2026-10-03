@@ -57,6 +57,8 @@ class AdminProjectResponse(BaseModel):
     customer: Optional[AdminCustomerSummary] = None
     assigned_developer: Optional[StaffUserResponse] = None
     package_name: Optional[str] = None
+    advance_payment_status: Optional[str] = "PENDING"
+    total_paid_inr: Optional[float] = 0.0
 
 
 class AdminProjectUpdate(BaseModel):
@@ -69,3 +71,4 @@ class AdminProjectUpdate(BaseModel):
 
 class AdminInquiryUpdate(BaseModel):
     status: Optional[InquiryStatus] = Field(None, description="Updated CRM status for lead/inquiry")
+    is_read: Optional[bool] = Field(None, description="Mark inquiry as read or unread")

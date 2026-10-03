@@ -33,6 +33,17 @@ class PaymentVerify(BaseModel):
     razorpay_signature: str
 
 
+class SandboxSignatureRequest(BaseModel):
+    project_id: str
+    razorpay_order_id: str
+
+
+class SandboxSignatureResponse(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
 class PaymentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

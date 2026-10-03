@@ -5,16 +5,23 @@ preview/production URL configuration, and lead/inquiry CRM management.
 """
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_roles
+from app.core.config import settings
+from app.db.session import async_session_factory
+from app.services.ai.artifact_storage import ArtifactStorage
+from app.services.ai.build_worker import BuildWorker
 from app.models.activity import ProjectActivity
 from app.models.customer import Customer
+from app.models.deployment import Deployment
 from app.models.enums import (
+    BuildReviewStatus,
     BuildStatus,
+    DeploymentStatus,
     InquiryStatus,
     PaymentStatus,
     PaymentType,
@@ -37,14 +44,26 @@ from app.schemas.admin import (
     StaffUserResponse,
 )
 from app.schemas.common import APIResponse
+from app.schemas.deployment import (
+    DeploymentEligibilityResponse,
+    DeploymentResponse,
+    DeploymentTriggerRequest,
+)
 from app.schemas.inquiry import InquiryResponse
 from app.schemas.website_build import (
     BuildApprovalRequest,
     BuildApprovalResponse,
+    BuildFileContentResponse,
+    BuildFileItem,
+    BuildRebuildRequest,
+    BuildReviewApproveRequest,
+    BuildReviewDetailResponse,
+    BuildReviewRejectRequest,
     ProjectAIContextResponse,
     WebsiteBuildResponse,
 )
 from app.services.ai_context import build_project_ai_context
+from app.services.deployment import DeploymentService
 
 router = APIRouter()
 
@@ -108,6 +127,7 @@ async def list_admin_projects(
             selectinload(Project.customer),
             selectinload(Project.assigned_developer),
             selectinload(Project.package),
+            selectinload(Project.payments),
         )
         .order_by(Project.created_at.desc())
     )
@@ -143,6 +163,15 @@ async def list_admin_projects(
                 is_active=p.assigned_developer.is_active,
             )
 
+        has_advance = any(
+            pay.status == PaymentStatus.SUCCESS and pay.payment_type in [PaymentType.ADVANCE, PaymentType.FULL]
+            for pay in (p.payments or [])
+        )
+        total_paid = sum(
+            float(pay.amount_inr) for pay in (p.payments or [])
+            if pay.status == PaymentStatus.SUCCESS
+        )
+
         formatted_projects.append(
             AdminProjectResponse(
                 id=p.id,
@@ -162,6 +191,8 @@ async def list_admin_projects(
                 customer=customer_summary,
                 assigned_developer=dev_summary,
                 package_name=p.package.name if p.package else None,
+                advance_payment_status="PAID" if has_advance else "PENDING",
+                total_paid_inr=total_paid,
             )
         )
 
@@ -189,6 +220,7 @@ async def get_admin_project(
             selectinload(Project.customer),
             selectinload(Project.assigned_developer),
             selectinload(Project.package),
+            selectinload(Project.payments),
         )
         .where(Project.id == project_id)
     )
@@ -219,6 +251,15 @@ async def get_admin_project(
             is_active=project.assigned_developer.is_active,
         )
 
+    has_advance = any(
+        pay.status == PaymentStatus.SUCCESS and pay.payment_type in [PaymentType.ADVANCE, PaymentType.FULL]
+        for pay in (project.payments or [])
+    )
+    total_paid = sum(
+        float(pay.amount_inr) for pay in (project.payments or [])
+        if pay.status == PaymentStatus.SUCCESS
+    )
+
     return APIResponse(
         success=True,
         message="Project details retrieved.",
@@ -240,6 +281,8 @@ async def get_admin_project(
             customer=customer_summary,
             assigned_developer=dev_summary,
             package_name=project.package.name if project.package else None,
+            advance_payment_status="PAID" if has_advance else "PENDING",
+            total_paid_inr=total_paid,
         ),
     )
 
@@ -361,6 +404,7 @@ async def update_admin_project(
             selectinload(Project.customer),
             selectinload(Project.assigned_developer),
             selectinload(Project.package),
+            selectinload(Project.payments),
         )
         .where(Project.id == project_id)
     )
@@ -388,6 +432,15 @@ async def update_admin_project(
             is_active=updated_project.assigned_developer.is_active,
         )
 
+    has_advance = any(
+        pay.status == PaymentStatus.SUCCESS and pay.payment_type in [PaymentType.ADVANCE, PaymentType.FULL]
+        for pay in (updated_project.payments or [])
+    )
+    total_paid = sum(
+        float(pay.amount_inr) for pay in (updated_project.payments or [])
+        if pay.status == PaymentStatus.SUCCESS
+    )
+
     return APIResponse(
         success=True,
         message="Project updated successfully.",
@@ -409,6 +462,8 @@ async def update_admin_project(
             customer=customer_summary,
             assigned_developer=dev_summary,
             package_name=updated_project.package.name if updated_project.package else None,
+            advance_payment_status="PAID" if has_advance else "PENDING",
+            total_paid_inr=total_paid,
         ),
     )
 
@@ -459,6 +514,8 @@ async def update_admin_inquiry(
 
     if payload.status is not None:
         inquiry.status = payload.status
+    if payload.is_read is not None:
+        inquiry.read_at = datetime.now(timezone.utc) if payload.is_read else None
 
     await db.commit()
     await db.refresh(inquiry)
@@ -500,6 +557,17 @@ async def list_team_members(
 # ---------------------------------------------------------------------------
 
 
+async def _execute_build_worker_task(build_id: str) -> None:
+    """Safely process an AI website build in an isolated session."""
+    async with async_session_factory() as session:
+        try:
+            worker = BuildWorker()
+            await worker.process_build(build_id, session)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Background build processing failed for %s", build_id)
+
+
 @router.post(
     "/projects/{project_id}/approve-build",
     response_model=APIResponse[BuildApprovalResponse],
@@ -507,6 +575,7 @@ async def list_team_members(
 )
 async def approve_and_start_build(
     project_id: str,
+    background_tasks: BackgroundTasks,
     payload: Optional[BuildApprovalRequest] = None,
     current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
     db: AsyncSession = Depends(get_db),
@@ -517,7 +586,8 @@ async def approve_and_start_build(
     2. Validates advance payment status (or waiver).
     3. Moves project status to BUILDING.
     4. Queues a versioned WebsiteBuild run.
-    5. Logs project audit activity.
+    5. Dispatches background build worker if enabled.
+    6. Logs project audit activity.
     """
     req = payload or BuildApprovalRequest()
 
@@ -540,16 +610,17 @@ async def approve_and_start_build(
         )
 
     # Verify advance payment unless bypassed
-    if not req.force_override_payment:
+    is_waived = req.force_override_payment or bool(req.waive_payment)
+    if not is_waived:
         has_completed_advance = any(
-            p.status == PaymentStatus.SUCCESS and p.payment_type == PaymentType.ADVANCE
+            p.status == PaymentStatus.SUCCESS and p.payment_type in [PaymentType.ADVANCE, PaymentType.FULL]
             for p in (project.payments or [])
         )
         # If project has a package with price > 0 and no advance payment is recorded
         if project.package and float(project.package.price_inr) > 0 and not has_completed_advance:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Advance payment must be completed before approving and starting the AI build. Use force_override_payment to bypass if authorized.",
+                detail="Advance payment must be completed before approving and starting the AI build. Use waive_payment to bypass if authorized.",
             )
 
     # Determine next build version number
@@ -596,6 +667,10 @@ async def approve_and_start_build(
     await db.refresh(new_build)
     await db.refresh(project)
 
+    # Trigger background worker if AI generation is enabled
+    if settings.AI_GENERATION_ENABLED:
+        background_tasks.add_task(_execute_build_worker_task, new_build.id)
+
     return APIResponse(
         success=True,
         message=f"Project approved. AI Website Build v{next_version} queued successfully.",
@@ -606,6 +681,431 @@ async def approve_and_start_build(
             project_status=project.status,
         ),
     )
+
+
+@router.post(
+    "/projects/{project_id}/builds/{build_id}/process",
+    response_model=APIResponse[WebsiteBuildResponse],
+    summary="Trigger processing of an AI website build",
+)
+async def process_build_run(
+    project_id: str,
+    build_id: str,
+    background_tasks: BackgroundTasks,
+    sync: bool = Query(False, description="Run synchronously if True, else background task"),
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger AI website builder pipeline execution for a specific build."""
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    if sync:
+        worker = BuildWorker()
+        build = await worker.process_build(build_id, db)
+    else:
+        background_tasks.add_task(_execute_build_worker_task, build.id)
+
+    return APIResponse(
+        success=True,
+        message="Build processing initiated in background." if not sync else f"Build completed with status: {build.status.value}",
+        data=WebsiteBuildResponse.model_validate(build),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/manifest",
+    response_model=APIResponse[dict],
+    summary="Get manifest for a generated build artifact",
+)
+async def get_build_manifest(
+    project_id: str,
+    build_id: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    storage = ArtifactStorage()
+    manifest = storage.read_manifest(project_id, build.version_number)
+    if not manifest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Build manifest not found.")
+
+    return APIResponse(
+        success=True,
+        message="Build manifest retrieved.",
+        data=manifest.model_dump(),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/files",
+    summary="List files for a generated build artifact",
+)
+async def list_build_files(
+    project_id: str,
+    build_id: str,
+    detailed: bool = Query(False, description="Return rich metadata if True, else list of paths"),
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    storage = ArtifactStorage()
+    if detailed:
+        file_items = storage.list_files_metadata(project_id, build.version_number)
+        return APIResponse(
+            success=True,
+            message="Detailed build files metadata retrieved.",
+            data=[BuildFileItem(**item) for item in file_items],
+        )
+
+    files = storage.list_files(project_id, build.version_number)
+    return APIResponse(
+        success=True,
+        message="Build files list retrieved.",
+        data=files,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/files/{file_path:path}",
+    response_model=APIResponse[BuildFileContentResponse],
+    summary="Safely read content of a generated file in build artifact",
+)
+async def get_build_file_content(
+    project_id: str,
+    build_id: str,
+    file_path: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    storage = ArtifactStorage()
+    try:
+        content, is_text, is_truncated, total_size = storage.read_file_safe(
+            project_id=project_id,
+            version_number=build.version_number,
+            relative_path=file_path,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    if content is None and total_size == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"File '{file_path}' not found in build.")
+
+    ext = file_path.split(".")[-1].lower() if "." in file_path else "txt"
+
+    return APIResponse(
+        success=True,
+        message="File content retrieved." if is_text else "Binary file metadata retrieved (text display unsupported).",
+        data=BuildFileContentResponse(
+            path=file_path,
+            file_type=ext,
+            size_bytes=total_size,
+            content=content,
+            is_text=is_text,
+            is_truncated=is_truncated,
+        ),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/review",
+    response_model=APIResponse[BuildReviewDetailResponse],
+    summary="Get complete build review and audit information for admin inspection",
+)
+async def get_build_review(
+    project_id: str,
+    build_id: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(WebsiteBuild)
+        .options(
+            selectinload(WebsiteBuild.project),
+            selectinload(WebsiteBuild.approved_by),
+            selectinload(WebsiteBuild.reviewed_by),
+        )
+        .where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    )
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    storage = ArtifactStorage()
+    manifest = storage.read_manifest(project_id, build.version_number)
+    file_items = storage.list_files_metadata(project_id, build.version_number)
+    total_size = sum(f["size_bytes"] for f in file_items)
+
+    providers_used = manifest.providers_used if manifest else {}
+    spec_summary = manifest.spec_summary if manifest else (build.spec_data or {})
+    validation_score = float(spec_summary.get("validation_score", 100.0))
+    entry_file = manifest.entry_file if manifest else "index.html"
+
+    # Extract or compile validation findings
+    findings = []
+    if build.status == BuildStatus.FAILED and build.admin_notes:
+        findings.append({
+            "file_path": entry_file,
+            "severity": "ERROR",
+            "rule": "BUILD_FAILURE",
+            "message": build.admin_notes,
+        })
+    elif spec_summary.get("findings"):
+        findings = spec_summary.get("findings")
+    elif build.spec_data and build.spec_data.get("findings"):
+        findings = build.spec_data.get("findings")
+
+    review_data = BuildReviewDetailResponse(
+        project_id=project_id,
+        project_title=build.project.title if build.project else "Project",
+        build_id=build.id,
+        version_number=build.version_number,
+        status=build.status,
+        review_status=build.review_status,
+        review_notes=build.review_notes,
+        is_active=build.is_active,
+        created_at=build.created_at,
+        approved_at=build.approved_at,
+        reviewed_at=build.reviewed_at,
+        reviewed_by_name=build.reviewed_by.full_name if build.reviewed_by else None,
+        providers_used=providers_used,
+        entry_file=entry_file,
+        files_count=len(file_items),
+        total_size_bytes=total_size,
+        validation_score=validation_score,
+        validation_findings=findings,
+        spec_summary=build.spec_data or {},
+        architecture_summary=build.architecture_data or {},
+        generated_code_path=build.generated_code_path,
+        admin_notes=build.admin_notes,
+    )
+
+    return APIResponse(
+        success=True,
+        message="Build review details retrieved.",
+        data=review_data,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/builds/{build_id}/approve-review",
+    response_model=APIResponse[WebsiteBuildResponse],
+    summary="Admin marks generated build as approved after code inspection",
+)
+async def approve_build_review(
+    project_id: str,
+    build_id: str,
+    payload: Optional[BuildReviewApproveRequest] = None,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    if build.status != BuildStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot approve build in '{build.status.value}' state. Build must be COMPLETED.",
+        )
+
+    build.review_status = BuildReviewStatus.APPROVED
+    if payload and payload.notes:
+        build.review_notes = payload.notes
+    build.reviewed_by_user_id = current_user.id
+    build.reviewed_at = datetime.now(timezone.utc)
+
+    activity = ProjectActivity(
+        project_id=project_id,
+        performed_by_user_id=current_user.id,
+        action_type="BUILD_APPROVED_BY_ADMIN",
+        note=f"AI Website Build v{build.version_number} approved by {current_user.full_name}."
+        + (f" Notes: {payload.notes}" if payload and payload.notes else ""),
+        is_visible_to_client=False,
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(build)
+
+    return APIResponse(
+        success=True,
+        message=f"Build v{build.version_number} approved successfully.",
+        data=WebsiteBuildResponse.model_validate(build),
+    )
+
+
+@router.post(
+    "/projects/{project_id}/builds/{build_id}/reject-review",
+    response_model=APIResponse[WebsiteBuildResponse],
+    summary="Admin rejects a generated build with required reason",
+)
+async def reject_build_review(
+    project_id: str,
+    build_id: str,
+    payload: BuildReviewRejectRequest,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    build.review_status = BuildReviewStatus.REJECTED
+    build.review_notes = payload.reason
+    build.reviewed_by_user_id = current_user.id
+    build.reviewed_at = datetime.now(timezone.utc)
+
+    activity = ProjectActivity(
+        project_id=project_id,
+        performed_by_user_id=current_user.id,
+        action_type="BUILD_REJECTED_BY_ADMIN",
+        note=f"AI Website Build v{build.version_number} rejected by {current_user.full_name}. Reason: {payload.reason}",
+        is_visible_to_client=False,
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(build)
+
+    return APIResponse(
+        success=True,
+        message=f"Build v{build.version_number} rejected.",
+        data=WebsiteBuildResponse.model_validate(build),
+    )
+
+
+@router.post(
+    "/projects/{project_id}/builds/{build_id}/rebuild",
+    response_model=APIResponse[WebsiteBuildResponse],
+    summary="Trigger a new build version preserving existing builds",
+)
+async def request_build_rebuild(
+    project_id: str,
+    build_id: str,
+    background_tasks: BackgroundTasks,
+    payload: Optional[BuildRebuildRequest] = None,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    existing_build = result.scalar_one_or_none()
+    if not existing_build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    # Calculate next version
+    version_count_stmt = select(func.count(WebsiteBuild.id)).where(WebsiteBuild.project_id == project_id)
+    existing_count = (await db.execute(version_count_stmt)).scalar() or 0
+    next_version = existing_count + 1
+
+    # Deactivate existing active builds
+    all_builds_stmt = select(WebsiteBuild).where(WebsiteBuild.project_id == project_id)
+    all_builds = (await db.execute(all_builds_stmt)).scalars().all()
+    for b in all_builds:
+        b.is_active = False
+
+    admin_directive = (payload.admin_notes if payload and payload.admin_notes else None) or existing_build.admin_notes
+
+    new_build = WebsiteBuild(
+        project_id=project_id,
+        revision_id=existing_build.revision_id,
+        version_number=next_version,
+        status=BuildStatus.QUEUED,
+        review_status=BuildReviewStatus.PENDING_REVIEW,
+        admin_notes=admin_directive,
+        is_active=True,
+        approved_by_user_id=current_user.id,
+        approved_at=datetime.now(timezone.utc),
+    )
+    db.add(new_build)
+
+    activity = ProjectActivity(
+        project_id=project_id,
+        performed_by_user_id=current_user.id,
+        action_type="BUILD_REBUILD_REQUESTED",
+        note=f"Rebuild requested by {current_user.full_name}: queued Build v{next_version}."
+        + (f" Directive: {admin_directive}" if admin_directive else ""),
+        is_visible_to_client=False,
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(new_build)
+
+    if settings.AI_GENERATION_ENABLED:
+        background_tasks.add_task(_execute_build_worker_task, new_build.id)
+
+    return APIResponse(
+        success=True,
+        message=f"Rebuild queued as Build v{next_version}.",
+        data=WebsiteBuildResponse.model_validate(new_build),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/sandbox-view",
+    summary="Safely render generated HTML in an isolated response with script execution disabled",
+)
+async def view_build_sandbox(
+    project_id: str,
+    build_id: str,
+    path: str = Query("index.html", description="Relative file path to view"),
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WebsiteBuild).where(WebsiteBuild.id == build_id, WebsiteBuild.project_id == project_id)
+    result = await db.execute(stmt)
+    build = result.scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Build '{build_id}' not found.")
+
+    storage = ArtifactStorage()
+    try:
+        content, is_text, _, _ = storage.read_file_safe(project_id, build.version_number, path)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    if not content:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"File '{path}' not found.")
+
+    media_type = "text/html"
+    if path.endswith(".css"):
+        media_type = "text/css"
+    elif path.endswith(".js"):
+        media_type = "text/javascript"
+
+    headers = {
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; script-src 'none'; frame-ancestors 'self'",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+    }
+
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 @router.get(
@@ -667,4 +1167,142 @@ async def get_project_ai_context(
         message="Project AI context synthesized successfully.",
         data=ProjectAIContextResponse(**context_data),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 14: Deployment Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/projects/{project_id}/builds/{build_id}/deployment-eligibility",
+    response_model=APIResponse[DeploymentEligibilityResponse],
+    summary="Check if website build meets all 5 production deployment gates",
+)
+async def check_deployment_eligibility(
+    project_id: str,
+    build_id: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Evaluates all 5 gates required for production deployment."""
+    stmt = (
+        select(Project)
+        .options(selectinload(Project.package), selectinload(Project.payments))
+        .where(Project.id == project_id)
+    )
+    project = (await db.execute(stmt)).scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    build_stmt = select(WebsiteBuild).where(
+        WebsiteBuild.id == build_id,
+        WebsiteBuild.project_id == project_id,
+    )
+    build = (await db.execute(build_stmt)).scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Website build not found")
+
+    service = DeploymentService()
+    eligibility = await service.check_eligibility(db, project, build)
+
+    return APIResponse(
+        success=True,
+        message="Deployment eligibility evaluated.",
+        data=eligibility,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/builds/{build_id}/deploy",
+    response_model=APIResponse[DeploymentResponse],
+    summary="Trigger production deployment for an approved website build",
+)
+async def deploy_website_build(
+    project_id: str,
+    build_id: str,
+    payload: Optional[DeploymentTriggerRequest] = None,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin triggers production deployment.
+    Backend evaluates all 5 security gates strictly:
+    1. Build status is COMPLETED
+    2. Admin review status is APPROVED
+    3. Client has given final approval
+    4. Remaining payment is 100% cleared
+    5. Artifact folder exists and passes safety checks
+    """
+    stmt = (
+        select(Project)
+        .options(selectinload(Project.package), selectinload(Project.payments))
+        .where(Project.id == project_id)
+    )
+    project = (await db.execute(stmt)).scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    build_stmt = select(WebsiteBuild).where(
+        WebsiteBuild.id == build_id,
+        WebsiteBuild.project_id == project_id,
+    )
+    build = (await db.execute(build_stmt)).scalar_one_or_none()
+    if not build:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Website build not found")
+
+    service = DeploymentService()
+    provider_name = payload.provider if payload else None
+    notes = payload.notes if payload else None
+
+    deployment = await service.deploy_build(
+        db=db,
+        project=project,
+        build=build,
+        user_id=current_user.id,
+        provider_name=provider_name,
+        notes=notes,
+    )
+
+    msg = (
+        f"Website successfully deployed live to {deployment.live_url}"
+        if deployment.status == DeploymentStatus.DEPLOYED
+        else f"Deployment failed: {deployment.error_message}"
+    )
+
+    return APIResponse(
+        success=(deployment.status == DeploymentStatus.DEPLOYED),
+        message=msg,
+        data=DeploymentResponse.model_validate(deployment),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/deployments",
+    response_model=APIResponse[List[DeploymentResponse]],
+    summary="List all deployments for a project (Admin)",
+)
+async def admin_list_project_deployments(
+    project_id: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.DEVELOPER])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin endpoint to view complete deployment audit history for a project."""
+    p_check = await db.execute(select(Project.id).where(Project.id == project_id))
+    if not p_check.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    stmt = (
+        select(Deployment)
+        .where(Deployment.project_id == project_id)
+        .order_by(Deployment.created_at.desc())
+    )
+    deployments = (await db.execute(stmt)).scalars().all()
+
+    return APIResponse(
+        success=True,
+        message="Deployments retrieved.",
+        data=[DeploymentResponse.model_validate(d) for d in deployments],
+    )
+
 

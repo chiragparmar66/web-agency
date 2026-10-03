@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.revision import Revision
     from app.models.payment import Payment
     from app.models.activity import ProjectActivity
+    from app.models.deployment import Deployment
     from app.models.message import ProjectMessage
     from app.models.website_build import WebsiteBuild
 
@@ -103,3 +104,9 @@ class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    deployments: Mapped[List["Deployment"]] = relationship(
+        "Deployment",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+

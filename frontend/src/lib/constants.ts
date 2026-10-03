@@ -1,8 +1,16 @@
 export const APP_CONFIG = {
   name: process.env.NEXT_PUBLIC_STUDIO_NAME || "Nexus Studio",
   apiUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1",
-  whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "+919876543210",
-  supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "hello@nexusstudio.dev",
+  whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "7877794272",
+  phoneNumber: process.env.NEXT_PUBLIC_PHONE_NUMBER || "7877794272",
+  supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "chiragparmar5768@gmail.com",
+};
+
+export const getWhatsAppUrl = (message = "Hi Nexus Studio, I'd like to discuss a website project."): string => {
+  const digits = APP_CONFIG.whatsappNumber.replace(/[^0-9]/g, "");
+  // Ensure country code 91 for Indian 10-digit number
+  const fullNumber = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`;
 };
 
 export const PROJECT_STATUS_LABELS: Record<string, { label: string; color: string }> = {

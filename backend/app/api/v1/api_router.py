@@ -23,6 +23,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication & P
 api_router.include_router(inquiries.router, prefix="/inquiries", tags=["Inquiries & Contact"])
 api_router.include_router(showcase.router, tags=["Public Showcase"])
 api_router.include_router(pricing.router, prefix="/pricing", tags=["Pricing Packages"])
+api_router.include_router(pricing.router, prefix="", tags=["Pricing Packages"])
 api_router.include_router(projects.router, prefix="/projects", tags=["Customer Projects"])
 api_router.include_router(
     requirements.router,

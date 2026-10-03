@@ -29,8 +29,11 @@ async def lifespan(app: FastAPI):
     # Seed initial studio services
     from app.db.init_db import seed_initial_data
     from app.db.session import async_session_factory
+    from app.services.admin_bootstrap import bootstrap_admin_account
     async with async_session_factory() as session:
         await seed_initial_data(session)
+        if settings.ADMIN_BOOTSTRAP_ENABLED and settings.ADMIN_INITIAL_PASSWORD:
+            await bootstrap_admin_account(session)
     logger.info("Studio services verified/seeded")
 
     yield

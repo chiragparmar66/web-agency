@@ -22,6 +22,7 @@ from app.models.customer import Customer
 from app.models.enums import PaymentStatus, PaymentType, ProjectStatus, UserRole
 from app.models.payment import Payment
 from app.models.project import Project
+from app.models.requirement import ProjectRequirement
 from app.models.user import User
 from app.schemas.common import APIResponse
 from app.schemas.payment import (
@@ -30,6 +31,8 @@ from app.schemas.payment import (
     OrderResponse,
     PaymentResponse,
     PaymentVerify,
+    SandboxSignatureRequest,
+    SandboxSignatureResponse,
 )
 
 router = APIRouter()
@@ -91,7 +94,22 @@ async def create_payment_order(
     if project.package and project.package.price_inr:
         base_price = float(project.package.price_inr)
 
-    if payload.payment_type in [PaymentType.ADVANCE, PaymentType.FINAL]:
+    # Calculate previously settled payments
+    paid_stmt = select(func.coalesce(func.sum(Payment.amount_inr), 0.0)).where(
+        Payment.project_id == project.id,
+        Payment.status == PaymentStatus.SUCCESS,
+    )
+    total_paid = float((await db.execute(paid_stmt)).scalar() or 0.0)
+    remaining_inr = max(0.0, base_price - total_paid)
+
+    if payload.payment_type == PaymentType.FINAL:
+        amount_inr = round(remaining_inr, 2)
+        if amount_inr <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Full project balance has already been cleared. No final payment required.",
+            )
+    elif payload.payment_type == PaymentType.ADVANCE:
         amount_inr = round(base_price / 2.0, 2)
     elif payload.payment_type == PaymentType.MILESTONE:
         amount_inr = round(base_price / 4.0, 2)
@@ -161,19 +179,7 @@ async def verify_payment(
     """
     project = await _get_project_with_payment_access(payload.project_id, current_user, db)
 
-    # 1. Replay attack guard: check if payment_id has already been consumed
-    replay_stmt = select(Payment).where(
-        Payment.razorpay_payment_id == payload.razorpay_payment_id,
-        Payment.status == PaymentStatus.SUCCESS,
-    )
-    replay_res = await db.execute(replay_stmt)
-    if replay_res.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Payment has already been processed and verified (replay attack prevented).",
-        )
-
-    # 2. Retrieve corresponding pending payment
+    # 1. Retrieve corresponding payment order first
     stmt = select(Payment).where(
         Payment.project_id == payload.project_id,
         Payment.razorpay_order_id == payload.razorpay_order_id,
@@ -187,11 +193,26 @@ async def verify_payment(
             detail="Matching payment order not found for this project.",
         )
 
+    # Idempotent retry: If this exact payment was already verified successfully with the same payment id, return it safely
     if payment.status == PaymentStatus.SUCCESS:
-        return APIResponse(
-            success=True,
-            message="Payment was already verified.",
-            data=PaymentResponse.model_validate(payment),
+        if payment.razorpay_payment_id == payload.razorpay_payment_id:
+            return APIResponse(
+                success=True,
+                message="Payment was already verified.",
+                data=PaymentResponse.model_validate(payment),
+            )
+
+    # 2. Replay attack guard: check if payment_id has already been consumed by ANOTHER payment record
+    replay_stmt = select(Payment).where(
+        Payment.razorpay_payment_id == payload.razorpay_payment_id,
+        Payment.status == PaymentStatus.SUCCESS,
+        Payment.id != payment.id,
+    )
+    replay_res = await db.execute(replay_stmt)
+    if replay_res.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment has already been processed and verified (replay attack prevented).",
         )
 
     # 3. Compute HMAC-SHA256 signature
@@ -219,10 +240,19 @@ async def verify_payment(
     # 5. Project lifecycle transition
     old_status = project.status.value
     if payment.payment_type in [PaymentType.ADVANCE, PaymentType.FULL]:
-        if project.status in [ProjectStatus.NEW, ProjectStatus.PAYMENT_PENDING]:
+        # Check if project requirements have already been submitted
+        req_stmt = select(ProjectRequirement).where(ProjectRequirement.project_id == project.id)
+        req_res = await db.execute(req_stmt)
+        project_req = req_res.scalar_one_or_none()
+
+        if project_req and project_req.is_submitted:
+            project.status = ProjectStatus.PENDING_APPROVAL
+        elif project.status in [ProjectStatus.NEW, ProjectStatus.PAYMENT_PENDING]:
             project.status = ProjectStatus.REQUIREMENTS_PENDING
     elif payment.payment_type == PaymentType.FINAL:
-        if project.status in [ProjectStatus.CLIENT_REVIEW, ProjectStatus.APPROVED]:
+        if project.status == ProjectStatus.PAYMENT_PENDING:
+            project.status = ProjectStatus.APPROVED
+        elif project.status in [ProjectStatus.CLIENT_REVIEW, ProjectStatus.APPROVED]:
             project.status = ProjectStatus.DEPLOYING
 
     # 6. Audit timeline activity logging
@@ -247,6 +277,61 @@ async def verify_payment(
         success=True,
         message="Payment verified successfully! Receipt has been generated.",
         data=PaymentResponse.model_validate(payment),
+    )
+
+
+@router.post(
+    "/sandbox-signature",
+    response_model=APIResponse[SandboxSignatureResponse],
+    summary="Generate test sandbox payment signature (development & test environments only)",
+)
+async def create_sandbox_signature(
+    payload: SandboxSignatureRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate authentic HMAC-SHA256 signature for test/sandbox checkouts.
+    Only available in development/testing environments to enable automated & local end-to-end verification.
+    """
+    if settings.ENVIRONMENT not in ["development", "testing"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sandbox payment simulation is disabled in production.",
+        )
+
+    await _get_project_with_payment_access(payload.project_id, current_user, db)
+
+    # Validate that matching pending payment exists
+    stmt = select(Payment).where(
+        Payment.project_id == payload.project_id,
+        Payment.razorpay_order_id == payload.razorpay_order_id,
+        Payment.status == PaymentStatus.PENDING,
+    )
+    result = await db.execute(stmt)
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active pending payment order not found.",
+        )
+
+    test_payment_id = f"pay_test_{uuid.uuid4().hex[:16]}"
+    message = f"{payload.razorpay_order_id}|{test_payment_id}".encode("utf-8")
+    signature = hmac.new(
+        settings.RAZORPAY_KEY_SECRET.encode("utf-8"),
+        message,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return APIResponse(
+        success=True,
+        message="Sandbox signature generated.",
+        data=SandboxSignatureResponse(
+            razorpay_order_id=payload.razorpay_order_id,
+            razorpay_payment_id=test_payment_id,
+            razorpay_signature=signature,
+        ),
     )
 
 

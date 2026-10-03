@@ -89,6 +89,7 @@ export interface ProjectItem {
   project_number: string;
   customer_id: string;
   package_id?: string;
+  package?: PricingPackage;
   title: string;
   business_name: string;
   status: ProjectStatus;
@@ -218,8 +219,9 @@ export interface StaffUserItem {
 export interface InquiryItem {
   id: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
+  subject?: string;
   business_name?: string;
   business_type?: string;
   city?: string;
@@ -227,6 +229,7 @@ export interface InquiryItem {
   selected_package?: string;
   message?: string;
   status: string;
+  read_at?: string | null;
   created_at: string;
 }
 
@@ -240,6 +243,8 @@ export interface AdminProjectItem extends ProjectItem {
   };
   assigned_developer?: StaffUserItem;
   package_name?: string;
+  advance_payment_status?: "PAID" | "PENDING";
+  total_paid_inr?: number;
 }
 
 export type PaymentType = "ADVANCE" | "MILESTONE" | "FINAL" | "FULL";
@@ -295,6 +300,13 @@ export interface WebsiteBuildItem {
   revision_id?: string | null;
   version_number: number;
   status: BuildStatus;
+  review_status?: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+  review_notes?: string | null;
+  reviewed_by_user_id?: string | null;
+  reviewed_at?: string | null;
+  client_approved?: boolean;
+  client_approved_at?: string | null;
+  client_feedback?: string | null;
   spec_data?: Record<string, any> | null;
   architecture_data?: Record<string, any> | null;
   design_system?: Record<string, any> | null;
@@ -308,10 +320,64 @@ export interface WebsiteBuildItem {
   updated_at: string;
 }
 
+export type WebsiteBuild = WebsiteBuildItem;
+
+export type BuildReviewStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export interface BuildReviewDetail {
+  project_id: string;
+  project_title: string;
+  build_id: string;
+  version_number: number;
+  status: BuildStatus;
+  review_status: BuildReviewStatus;
+  review_notes?: string | null;
+  client_approved?: boolean;
+  client_approved_at?: string | null;
+  client_feedback?: string | null;
+  is_active: boolean;
+  created_at: string;
+  approved_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by_name?: string | null;
+  providers_used: Record<string, string>;
+  entry_file: string;
+  files_count: number;
+  total_size_bytes: number;
+  validation_score: number;
+  validation_findings: Array<{
+    file_path: string;
+    severity: "ERROR" | "WARNING" | "INFO";
+    rule: string;
+    message: string;
+  }>;
+  spec_summary: Record<string, any>;
+  architecture_summary?: Record<string, any> | null;
+  generated_code_path?: string | null;
+  admin_notes?: string | null;
+}
+
+export interface BuildFileItem {
+  path: string;
+  file_type: string;
+  size_bytes: number;
+  is_text: boolean;
+}
+
+export interface BuildFileContent {
+  path: string;
+  file_type: string;
+  size_bytes: number;
+  content?: string | null;
+  is_text: boolean;
+  is_truncated: boolean;
+}
+
 export interface BuildApprovalPayload {
   admin_notes?: string;
   revision_id?: string;
   force_override_payment?: boolean;
+  waive_payment?: boolean;
 }
 
 export interface ProjectAiContext {
@@ -361,5 +427,58 @@ export interface ProjectAiContext {
   };
 }
 
+export type DeploymentStatus =
+  | "NOT_READY"
+  | "READY"
+  | "QUEUED"
+  | "DEPLOYING"
+  | "DEPLOYED"
+  | "FAILED"
+  | "ROLLED_BACK";
 
+export interface Deployment {
+  id: string;
+  project_id: string;
+  build_id: string;
+  version_number: number;
+  status: DeploymentStatus;
+  provider: string;
+  provider_deployment_id?: string | null;
+  live_url?: string | null;
+  error_message?: string | null;
+  deployed_by_user_id?: string | null;
+  deployed_at?: string | null;
+  deployment_metadata?: Record<string, any> | null;
+  smoke_test_status?: string | null;
+  smoke_test_details?: Record<string, any> | null;
+  created_at: string;
+  updated_at: string;
+}
 
+export interface DeploymentEligibility {
+  is_eligible: boolean;
+  build_completed: boolean;
+  admin_approved: boolean;
+  client_approved: boolean;
+  final_payment_cleared: boolean;
+  artifact_available: boolean;
+  package_price_inr: number;
+  total_paid_inr: number;
+  remaining_balance_inr: number;
+  blockers: string[];
+}
+
+export interface ClientBuildPreview {
+  project_id: string;
+  project_title: string;
+  build_id: string;
+  version_number: number;
+  status: BuildStatus;
+  review_status: BuildReviewStatus;
+  client_approved: boolean;
+  client_approved_at?: string | null;
+  preview_url: string;
+  entry_file: string;
+  files_count: number;
+  created_at: string;
+}

@@ -33,6 +33,22 @@ class BuildStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class BuildReviewStatus(str, Enum):
+    PENDING_REVIEW = "PENDING_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class DeploymentStatus(str, Enum):
+    NOT_READY = "NOT_READY"
+    READY = "READY"
+    QUEUED = "QUEUED"
+    DEPLOYING = "DEPLOYING"
+    DEPLOYED = "DEPLOYED"
+    FAILED = "FAILED"
+    ROLLED_BACK = "ROLLED_BACK"
+
+
 class RevisionStatus(str, Enum):
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"

@@ -1,75 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { api, ApiError } from "@/lib/api";
 import { PricingPackage, ProjectItem } from "@/types";
-import { fadeUpVariants, alertVariants, cardHoverProps } from "@/lib/motion";
-
-const PACKAGES: PricingPackage[] = [
-  {
-    id: "",
-    slug: "starter-website",
-    name: "Starter Website",
-    price_inr: 1999,
-    description: "A clean single-page website for individual professionals.",
-    features: ["Single-page responsive website", "Contact form", "SEO setup", "3-day delivery"],
-    delivery_days: 3,
-    revisions_included: 1,
-  },
-  {
-    id: "",
-    slug: "business-website",
-    name: "Business Website",
-    price_inr: 4999,
-    description: "A professional multi-page website for established businesses.",
-    features: ["Up to 5 pages", "Inquiry form", "Maps & social links", "7-day delivery"],
-    delivery_days: 7,
-    revisions_included: 2,
-    is_popular: true,
-  },
-  {
-    id: "",
-    slug: "professional-website",
-    name: "Professional Website",
-    price_inr: 9999,
-    description: "Premium site with blog, portfolio, and analytics.",
-    features: ["Up to 10 pages", "Blog / news section", "Analytics integration", "12-day delivery"],
-    delivery_days: 12,
-    revisions_included: 3,
-  },
-  {
-    id: "",
-    slug: "custom-solution",
-    name: "Custom Solution",
-    price_inr: 19999,
-    description: "Fully bespoke web app, e-commerce, or custom integration.",
-    features: [
-      "Unlimited pages",
-      "Custom web features",
-      "Payment integration",
-      "Admin dashboard",
-    ],
-    delivery_days: 21,
-    revisions_included: 5,
-  },
-];
+import { fadeUpVariants, alertVariants } from "@/lib/motion";
 
 export default function NewProjectPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
-  const [selectedPackageSlug, setSelectedPackageSlug] = useState<string>("business-website");
+
+  // Dynamic packages from backend
+  const [packages, setPackages] = useState<PricingPackage[]>([]);
+  const [loadingPackages, setLoadingPackages] = useState(true);
+  const [packagesError, setPackagesError] = useState<string | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string>("");
+
   const [title, setTitle] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchPackages = useCallback(async () => {
+    setLoadingPackages(true);
+    setPackagesError(null);
+    try {
+      const res = await api.get<PricingPackage[]>("/packages");
+      if (res.success && res.data && res.data.length > 0) {
+        setPackages(res.data);
+        const popular = res.data.find((p) => p.is_popular);
+        setSelectedPackageId(popular ? popular.id : res.data[0].id);
+      } else {
+        setPackagesError("No active packages available. Please contact our support.");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setPackagesError(err.message);
+      } else {
+        setPackagesError("Could not load pricing packages. Please check your connection.");
+      }
+    } finally {
+      setLoadingPackages(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPackages();
+  }, [fetchPackages]);
+
+  const selectedPackage = packages.find((p) => p.id === selectedPackageId);
+
   const handleSubmit = async () => {
     if (!title.trim() || !businessName.trim()) {
       setError("Please enter both a project title and business name.");
+      return;
+    }
+
+    if (!selectedPackageId) {
+      setError("Please select a package for your project.");
       return;
     }
 
@@ -80,7 +71,7 @@ export default function NewProjectPage() {
       const res = await api.post<ProjectItem>("/projects", {
         title: title.trim(),
         business_name: businessName.trim(),
-        package_slug: selectedPackageSlug,
+        package_id: selectedPackageId,
       });
       if (res.success && res.data) {
         router.push(`/dashboard/projects/${res.data.id}`);
@@ -115,7 +106,7 @@ export default function NewProjectPage() {
           Start a New Project
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Select a package and tell us about your business. Our team will contact you within 24 hours.
+          Select an active package and tell us about your business. Our team will review your specifications.
         </p>
       </div>
 
@@ -141,99 +132,128 @@ export default function NewProjectPage() {
             exit={{ opacity: 0, x: -12, transition: { duration: 0.18 } }}
             className="space-y-4"
           >
-            {PACKAGES.map((pkg) => (
-              <motion.button
-                key={pkg.slug}
-                type="button"
-                whileHover={{ y: -2, transition: { duration: 0.15 } }}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => setSelectedPackageSlug(pkg.slug)}
-                className={`w-full text-left rounded-lg border p-5 transition-all ${
-                  selectedPackageSlug === pkg.slug
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white hover:border-slate-400"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-sm font-bold ${
-                          selectedPackageSlug === pkg.slug ? "text-white" : "text-slate-900"
-                        }`}
-                      >
-                        {pkg.name}
-                      </span>
-                      {pkg.is_popular && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            selectedPackageSlug === pkg.slug
-                              ? "bg-white/20 text-white"
-                              : "bg-blue-50 text-blue-700"
+            {loadingPackages ? (
+              <div className="flex flex-col items-center justify-center py-16 text-xs text-slate-400">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-600 mb-2" />
+                <span>Loading available studio packages…</span>
+              </div>
+            ) : packagesError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-center text-xs text-red-700 space-y-3">
+                <div className="flex items-center justify-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <span className="font-semibold">{packagesError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchPackages}
+                  className="inline-flex items-center gap-1.5 rounded bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry Loading
+                </button>
+              </div>
+            ) : packages.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
+                No active packages currently available. Please check back shortly.
+              </div>
+            ) : (
+              <>
+                {packages.map((pkg) => (
+                  <motion.button
+                    key={pkg.id}
+                    type="button"
+                    whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => setSelectedPackageId(pkg.id)}
+                    className={`w-full text-left rounded-lg border p-5 transition-all ${
+                      selectedPackageId === pkg.id
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white hover:border-slate-400"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-sm font-bold ${
+                              selectedPackageId === pkg.id ? "text-white" : "text-slate-900"
+                            }`}
+                          >
+                            {pkg.name}
+                          </span>
+                          {pkg.is_popular && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                selectedPackageId === pkg.id
+                                  ? "bg-white/20 text-white"
+                                  : "bg-blue-50 text-blue-700"
+                              }`}
+                            >
+                              Most Popular
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={`mt-1 text-xs ${
+                            selectedPackageId === pkg.id ? "text-slate-300" : "text-slate-500"
                           }`}
                         >
-                          Most Popular
-                        </span>
-                      )}
+                          {pkg.description}
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {(pkg.features || []).map((f) => (
+                            <li key={f} className="flex items-center gap-1.5 text-xs">
+                              <CheckCircle2
+                                className={`h-3.5 w-3.5 shrink-0 ${
+                                  selectedPackageId === pkg.id
+                                    ? "text-emerald-400"
+                                    : "text-emerald-500"
+                                }`}
+                              />
+                              <span
+                                className={
+                                  selectedPackageId === pkg.id ? "text-slate-200" : "text-slate-600"
+                                }
+                              >
+                                {f}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p
+                          className={`text-xl font-extrabold ${
+                            selectedPackageId === pkg.id ? "text-white" : "text-slate-900"
+                          }`}
+                        >
+                          ₹{Number(pkg.price_inr).toLocaleString("en-IN")}
+                        </p>
+                        <p
+                          className={`text-[10px] ${
+                            selectedPackageId === pkg.id ? "text-slate-300" : "text-slate-400"
+                          }`}
+                        >
+                          {pkg.revisions_included} revision{pkg.revisions_included > 1 ? "s" : ""}
+                        </p>
+                      </div>
                     </div>
-                    <p
-                      className={`mt-1 text-xs ${
-                        selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-500"
-                      }`}
-                    >
-                      {pkg.description}
-                    </p>
-                    <ul className="mt-2 space-y-1">
-                      {pkg.features.map((f) => (
-                        <li key={f} className="flex items-center gap-1.5 text-xs">
-                          <CheckCircle2
-                            className={`h-3.5 w-3.5 shrink-0 ${
-                              selectedPackageSlug === pkg.slug
-                                ? "text-emerald-400"
-                                : "text-emerald-500"
-                            }`}
-                          />
-                          <span
-                            className={
-                              selectedPackageSlug === pkg.slug ? "text-slate-200" : "text-slate-600"
-                            }
-                          >
-                            {f}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={`text-xl font-extrabold ${
-                        selectedPackageSlug === pkg.slug ? "text-white" : "text-slate-900"
-                      }`}
-                    >
-                      ₹{pkg.price_inr.toLocaleString("en-IN")}
-                    </p>
-                    <p
-                      className={`text-[10px] ${
-                        selectedPackageSlug === pkg.slug ? "text-slate-300" : "text-slate-400"
-                      }`}
-                    >
-                      {pkg.revisions_included} revision{pkg.revisions_included > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              </motion.button>
-            ))}
+                  </motion.button>
+                ))}
 
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.005 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setStep(2)}
-              className="w-full flex items-center justify-center gap-2 rounded bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
-            >
-              Continue to Project Details
-              <ArrowRight className="h-4 w-4" />
-            </motion.button>
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.005 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setStep(2)}
+                  disabled={!selectedPackageId}
+                  className="w-full flex items-center justify-center gap-2 rounded bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                >
+                  Continue to Project Details
+                  <ArrowRight className="h-4 w-4" />
+                </motion.button>
+              </>
+            )}
           </motion.div>
         )}
 
@@ -250,8 +270,8 @@ export default function NewProjectPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs">
               <p className="text-slate-500">Selected package:</p>
               <p className="font-bold text-slate-900">
-                {PACKAGES.find((p) => p.slug === selectedPackageSlug)?.name} —{" "}
-                ₹{(PACKAGES.find((p) => p.slug === selectedPackageSlug)?.price_inr ?? 0).toLocaleString("en-IN")}
+                {selectedPackage?.name} —{" "}
+                ₹{(selectedPackage ? Number(selectedPackage.price_inr) : 0).toLocaleString("en-IN")}
               </p>
               <button
                 type="button"

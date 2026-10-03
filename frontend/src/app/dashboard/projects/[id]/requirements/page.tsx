@@ -196,10 +196,10 @@ export default function RequirementsPage() {
       );
       if (res.success && res.data) {
         setRequirements(res.data);
-        setSuccessMessage("Requirements successfully submitted to our engineering team!");
+        setSuccessMessage("Specifications finalized and locked! Please proceed with the advance payment on your project dashboard.");
         setTimeout(() => {
           router.push(`/dashboard/projects/${projectId}`);
-        }, 1500);
+        }, 1200);
       }
     } catch (err) {
       if (err instanceof ApiError) {

@@ -1,13 +1,14 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import BuildStatus
+from app.models.enums import BuildReviewStatus, BuildStatus
 
 if TYPE_CHECKING:
+    from app.models.deployment import Deployment
     from app.models.project import Project
     from app.models.revision import Revision
     from app.models.user import User
@@ -35,6 +36,25 @@ class WebsiteBuild(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
+    review_status: Mapped[BuildReviewStatus] = mapped_column(
+        Enum(BuildReviewStatus, name="build_review_status_enum", native_enum=False),
+        default=BuildReviewStatus.PENDING_REVIEW,
+        nullable=False,
+        index=True,
+    )
+    review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Phase 14: Client Approval fields
+    client_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    client_approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     spec_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     architecture_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     design_system: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -52,4 +72,8 @@ class WebsiteBuild(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="builds")
     revision: Mapped[Optional["Revision"]] = relationship("Revision", back_populates="builds")
-    approved_by: Mapped[Optional["User"]] = relationship("User")
+    approved_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[approved_by_user_id])
+    reviewed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[reviewed_by_user_id])
+    deployments: Mapped[List["Deployment"]] = relationship(
+        "Deployment", back_populates="build", cascade="all, delete-orphan"
+    )

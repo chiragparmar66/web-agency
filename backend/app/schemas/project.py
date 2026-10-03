@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import ProjectStatus
+from app.schemas.pricing import PricingPackageResponse
 
 
 class ProjectCreate(BaseModel):
@@ -18,6 +19,7 @@ class ProjectResponse(BaseModel):
     project_number: str
     customer_id: str
     package_id: Optional[str] = None
+    package: Optional[PricingPackageResponse] = None
     title: str
     business_name: str
     status: ProjectStatus

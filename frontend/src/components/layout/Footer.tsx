@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Mail, MapPin, Phone } from "lucide-react";
-import { APP_CONFIG } from "@/lib/constants";
+import { Mail, MessageCircle, Phone } from "lucide-react";
+import { APP_CONFIG, getWhatsAppUrl } from "@/lib/constants";
 
 export default function Footer() {
   return (
@@ -101,10 +101,6 @@ export default function Footer() {
               Direct Contact
             </h3>
             <div className="space-y-2.5 text-xs text-slate-400">
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                <span>Bengaluru & Mumbai, India</span>
-              </div>
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-slate-500 shrink-0" />
                 <a
@@ -117,12 +113,21 @@ export default function Footer() {
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-slate-500 shrink-0" />
                 <a
-                  href={`https://wa.me/${APP_CONFIG.whatsappNumber.replace(/[^0-9]/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`tel:${APP_CONFIG.phoneNumber}`}
                   className="hover:text-white transition-colors"
                 >
-                  {APP_CONFIG.whatsappNumber} (WhatsApp)
+                  +91 {APP_CONFIG.phoneNumber}
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                <a
+                  href={getWhatsAppUrl("Hi Nexus Studio, I'd like to discuss a website project.")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-emerald-400 transition-colors"
+                >
+                  +91 {APP_CONFIG.whatsappNumber} (WhatsApp)
                 </a>
               </div>
             </div>

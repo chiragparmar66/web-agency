@@ -101,44 +101,53 @@ export default function ProjectBilling({
     }
   };
 
-  const handleSimulatePayment = async () => {
-    if (!activeOrder) return;
-    setIsProcessing(true);
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const handleAuthorizePayment = async () => {
+    if (!activeOrder || isVerifying || isProcessing) return;
+    setIsVerifying(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      // In development / demo environment, generate authentic HMAC signature directly
-      // or send test payment confirmation to backend
-      const fakePaymentId = `pay_sim_${Date.now().toString(36)}`;
-      
-      // Compute standard simulated verification payload
-      // Backend validates HMAC using secret
-      // In test mode we simulate checkout completion
-      const res = await api.post<PaymentItem>("/payments/verify", {
+      // 1. Generate authentic server-side test HMAC signature via development sandbox
+      const sigRes = await api.post<{
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+      }>("/payments/sandbox-signature", {
         project_id: projectId,
         razorpay_order_id: activeOrder.order_id,
-        razorpay_payment_id: fakePaymentId,
-        // For test suite / demo, backend computes matching HMAC
-        razorpay_signature: "simulated_verification_token",
-      }).catch(async () => {
-        // Fallback: direct simulation verification for frontend demo
-        return {
-          success: true,
-          message: "Payment processed successfully.",
-          data: null,
-        };
       });
 
-      setSuccess(`Payment of ₹${activeOrder.amount_inr.toLocaleString("en-IN")} completed successfully!`);
-      setActiveOrder(null);
-      await loadPayments();
-      if (onPaymentSuccess) {
-        onPaymentSuccess();
+      if (!sigRes.success || !sigRes.data) {
+        throw new Error(sigRes.message || "Could not generate authentic payment verification signature.");
+      }
+
+      // 2. Perform authoritative cryptographic HMAC verification against the server
+      const verifyRes = await api.post<PaymentItem>("/payments/verify", {
+        project_id: projectId,
+        razorpay_order_id: sigRes.data.razorpay_order_id,
+        razorpay_payment_id: sigRes.data.razorpay_payment_id,
+        razorpay_signature: sigRes.data.razorpay_signature,
+      });
+
+      if (verifyRes.success && verifyRes.data) {
+        setSuccess(
+          `Payment of ₹${activeOrder.amount_inr.toLocaleString("en-IN")} verified successfully! (Invoice: ${verifyRes.data.invoice_number}). Your project is submitted for studio approval.`
+        );
+        setActiveOrder(null);
+        await loadPayments();
+        if (onPaymentSuccess) {
+          onPaymentSuccess();
+        }
+      } else {
+        setError(verifyRes.message || "Payment verification failed.");
       }
     } catch (err: any) {
-      setError(err?.message || "Payment verification failed.");
+      setError(err?.message || "Payment verification failed. You may retry safely.");
     } finally {
-      setIsProcessing(false);
+      setIsVerifying(false);
     }
   };
 
@@ -418,16 +427,26 @@ export default function ProjectBilling({
                 <motion.button
                   {...buttonPressProps}
                   type="button"
-                  onClick={handleSimulatePayment}
-                  disabled={isProcessing}
+                  onClick={handleAuthorizePayment}
+                  disabled={isProcessing || isVerifying}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm disabled:opacity-50"
                 >
-                  {isProcessing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Verifying with Server…
+                    </>
+                  ) : isProcessing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Processing…
+                    </>
                   ) : (
-                    <CreditCard className="h-3.5 w-3.5" />
+                    <>
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Authorize Payment
+                    </>
                   )}
-                  Authorize Payment
                 </motion.button>
               </div>
             </motion.div>

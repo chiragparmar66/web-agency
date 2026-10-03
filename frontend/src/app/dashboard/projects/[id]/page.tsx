@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { api } from "@/lib/api";
-import { ProjectDetail } from "@/types";
+import { ProjectDetail, WebsiteBuild } from "@/types";
 import {
   fadeUpVariants,
   staggerContainerVariants,
@@ -75,17 +75,26 @@ export default function ProjectDetailPage() {
   const projectId = params?.id as string;
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [builds, setBuilds] = useState<WebsiteBuild[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!projectId) return;
     try {
-      const res = await api.get<ProjectDetail>(`/projects/${projectId}`);
-      if (res.success && res.data) {
-        setProject(res.data);
+      const [projRes, buildsRes] = await Promise.all([
+        api.get<ProjectDetail>(`/projects/${projectId}`),
+        api.get<WebsiteBuild[]>(`/projects/${projectId}/builds`),
+      ]);
+
+      if (projRes.success && projRes.data) {
+        setProject(projRes.data);
       } else {
         setError("Project not found.");
+      }
+
+      if (buildsRes.success && Array.isArray(buildsRes.data)) {
+        setBuilds(buildsRes.data);
       }
     } catch {
       setError("Could not load project details.");
@@ -118,6 +127,7 @@ export default function ProjectDetailPage() {
   const currentStatusIndex = STATUS_PIPELINE.indexOf(project.status);
   const statusLabel = STATUS_LABELS[project.status] ?? project.status;
   const statusColor = STATUS_COLORS[project.status] ?? "bg-slate-100 text-slate-600";
+  const latestBuild = builds.length > 0 ? builds[0] : null;
 
   return (
     <motion.div
@@ -170,7 +180,7 @@ export default function ProjectDetailPage() {
               Action Required
             </p>
             <p className="text-sm text-amber-700">
-              Please submit your project requirements so our studio team can begin your website.
+              Please submit your project specifications so our studio team can begin your website.
             </p>
             <motion.div {...buttonPressProps} className="inline-block mt-3">
               <Link
@@ -184,31 +194,143 @@ export default function ProjectDetailPage() {
           </motion.div>
         )}
 
-        {project.status === "CLIENT_REVIEW" && project.preview_url && (
+        {project.status === "REQUIREMENTS_PENDING" && (
           <motion.div
             variants={alertVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="rounded-lg border border-teal-200 bg-teal-50 p-5 shadow-sm"
+            className="rounded-lg border border-blue-200 bg-blue-50/80 p-5 shadow-sm"
           >
-            <p className="text-xs font-bold text-teal-800 uppercase tracking-wide mb-1">
-              Preview Ready for Review
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-blue-700 shrink-0" />
+              <p className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                Requirements Completed &mdash; Advance Payment Required
+              </p>
+            </div>
+            <p className="mt-1 text-sm text-blue-800">
+              Your specifications have been submitted and locked. Please complete the 50% advance milestone in the billing section below to submit your project for studio approval.
             </p>
-            <p className="text-sm text-teal-700 mb-3">
-              Your website preview is ready. Review the staging link below and provide feedback.
+          </motion.div>
+        )}
+
+        {project.status === "PENDING_APPROVAL" && (
+          <motion.div
+            variants={alertVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="rounded-lg border border-amber-200 bg-amber-50/80 p-5 shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-700 shrink-0" />
+              <p className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                Submitted & Awaiting Studio Approval
+              </p>
+            </div>
+            <p className="mt-1 text-sm text-amber-800">
+              Your requirements have been finalized and advance payment is verified. Our studio director is reviewing your project requirements and uploaded assets before starting the website build.
             </p>
-            <motion.div {...buttonPressProps} className="inline-block">
-              <a
-                href={project.preview_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded bg-teal-700 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-800 transition-colors shadow-sm"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                View Preview
-              </a>
-            </motion.div>
+          </motion.div>
+        )}
+
+        {project.status === "BUILDING" && (
+          <motion.div
+            variants={alertVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="rounded-lg border border-violet-200 bg-violet-50/80 p-5 shadow-sm"
+          >
+            <p className="text-xs font-bold text-violet-900 uppercase tracking-wide mb-1">
+              ⚡ Build in Progress
+            </p>
+            <p className="text-sm text-violet-800">
+              Our studio team has approved your request and the website is currently being constructed. You will receive a notification when the staging preview is ready.
+            </p>
+          </motion.div>
+        )}
+
+        {latestBuild && (
+          <motion.div
+            variants={alertVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={`rounded-lg border p-5 shadow-sm ${
+              latestBuild.client_approved
+                ? "border-emerald-200 bg-emerald-50/70"
+                : "border-teal-200 bg-teal-50"
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  {latestBuild.client_approved ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-teal-600 shrink-0" />
+                  )}
+                  <p
+                    className={`text-xs font-bold uppercase tracking-wide ${
+                      latestBuild.client_approved ? "text-emerald-900" : "text-teal-900"
+                    }`}
+                  >
+                    {latestBuild.client_approved
+                      ? `Website Build v${latestBuild.version_number} — Approved by You`
+                      : `Website Build v${latestBuild.version_number} — Ready for Your Review`}
+                  </p>
+                </div>
+                <p
+                  className={`mt-1 text-sm ${
+                    latestBuild.client_approved ? "text-emerald-800" : "text-teal-800"
+                  }`}
+                >
+                  {latestBuild.client_approved
+                    ? project.status === "PAYMENT_PENDING"
+                      ? "You have approved this build. Please clear the remaining milestone payment in the billing section below to deploy live."
+                      : project.status === "DEPLOYING"
+                      ? "Your approved website is currently undergoing deployment to production servers."
+                      : project.status === "LIVE"
+                      ? "Your approved website has been successfully deployed and is live!"
+                      : "You have approved this website build. It is queued for production launch."
+                    : "Our engineering team has inspected and verified your generated website build. Please review the live sandbox to approve or request adjustments."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <motion.div {...buttonPressProps}>
+                  <Link
+                    href={`/dashboard/projects/${project.id}/builds/${latestBuild.id}`}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold text-white transition-colors shadow-sm ${
+                      latestBuild.client_approved
+                        ? "bg-emerald-700 hover:bg-emerald-800"
+                        : "bg-teal-700 hover:bg-teal-800"
+                    }`}
+                  >
+                    {latestBuild.client_approved ? "View Approved Sandbox" : "Review & Approve Build"}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </motion.div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {project.status === "PAYMENT_PENDING" && !latestBuild?.client_approved && (
+          <motion.div
+            variants={alertVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm"
+          >
+            <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">
+              Payment Pending
+            </p>
+            <p className="text-sm text-amber-700">
+              Please complete the final milestone payment in the billing section below to complete your website deployment.
+            </p>
           </motion.div>
         )}
 

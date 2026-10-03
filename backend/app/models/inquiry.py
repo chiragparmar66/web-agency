@@ -1,5 +1,6 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -20,8 +21,9 @@ class Inquiry(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -38,7 +40,9 @@ class Inquiry(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     customer: Mapped[Optional["Customer"]] = relationship("Customer", back_populates="inquiries")
     converted_project: Mapped[Optional["Project"]] = relationship("Project", back_populates="inquiry")
+

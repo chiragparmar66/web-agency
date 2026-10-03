@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Clock,
   Mail,
-  MapPin,
   MessageSquare,
   Phone,
   Send,
@@ -17,7 +16,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { api, ApiError } from "@/lib/api";
-import { APP_CONFIG } from "@/lib/constants";
+import { APP_CONFIG, getWhatsAppUrl } from "@/lib/constants";
 import {
   fadeUpVariants,
   alertVariants,
@@ -33,6 +32,7 @@ function ContactForm() {
     name: "",
     email: "",
     phone: "",
+    subject: "",
     business_name: "",
     business_type: "",
     city: "",
@@ -46,12 +46,22 @@ function ContactForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setErrorMessage(null);
+
+    // Frontend validation: must provide at least email or phone
+    if (!formData.email.trim() && !formData.phone.trim()) {
+      setErrorMessage("Please provide at least an email address or a phone number so our team can reach you.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const response = await api.post("/inquiries", {
         ...formData,
+        email: formData.email.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        subject: formData.subject.trim() || undefined,
         source: "CONTACT_FORM",
       });
 
@@ -61,6 +71,7 @@ function ContactForm() {
           name: "",
           email: "",
           phone: "",
+          subject: "",
           business_name: "",
           business_type: "",
           city: "",
@@ -282,6 +293,19 @@ function ContactForm() {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                        Subject / Brief Headline
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.subject}
+                        onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                        placeholder="e.g. New Corporate Website for Medical Clinic"
+                        className="w-full rounded border border-slate-300 px-3.5 py-2.5 text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                         Project Brief / Requirements <span className="text-rose-500">*</span>
                       </label>
                       <textarea
@@ -302,7 +326,7 @@ function ContactForm() {
                       className="w-full inline-flex items-center justify-center gap-2 rounded bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors shadow-sm"
                     >
                       {loading ? (
-                        <span>Submitting Inquiry...</span>
+                        <span>Submitting Consultation Request...</span>
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
@@ -333,14 +357,12 @@ function ContactForm() {
                     Prefer direct messaging? Send your requirements, business name, and reference websites directly to our developer team on WhatsApp for an immediate response.
                   </p>
                   <a
-                    href={`https://wa.me/${APP_CONFIG.whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                      "Hello Nexus Studio! I would like to discuss a new web development project."
-                    )}`}
+                    href={getWhatsAppUrl("Hi Nexus Studio, I'd like to discuss a website project.")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 rounded bg-emerald-700 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-800 transition-colors"
                   >
-                    <span>Message on WhatsApp</span>
+                    <span>Message on WhatsApp (+91 {APP_CONFIG.whatsappNumber})</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </a>
                 </div>
@@ -352,14 +374,6 @@ function ContactForm() {
                   </h3>
 
                   <div className="space-y-4 text-xs text-slate-600">
-                    <div className="flex items-start gap-3">
-                      <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="text-slate-800">Primary Locations:</strong>
-                        <p className="text-slate-500 mt-0.5">Bengaluru & Mumbai, India</p>
-                      </div>
-                    </div>
-
                     <div className="flex items-start gap-3">
                       <Mail className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
                       <div>
@@ -379,7 +393,14 @@ function ContactForm() {
                       <Phone className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
                       <div>
                         <strong className="text-slate-800">Direct Phone:</strong>
-                        <p className="mt-0.5 text-slate-700">{APP_CONFIG.whatsappNumber}</p>
+                        <p className="mt-0.5">
+                          <a
+                            href={`tel:${APP_CONFIG.phoneNumber}`}
+                            className="text-slate-800 hover:text-blue-600 font-medium"
+                          >
+                            +91 {APP_CONFIG.phoneNumber}
+                          </a>
+                        </p>
                       </div>
                     </div>
 

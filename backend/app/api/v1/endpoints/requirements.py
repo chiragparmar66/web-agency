@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, get_db
 from app.models.customer import Customer
-from app.models.enums import ProjectStatus, UserRole
+from app.models.enums import PaymentStatus, PaymentType, ProjectStatus, UserRole
+from app.models.payment import Payment
 from app.models.project import Project
 from app.models.requirement import ProjectRequirement
 from app.models.user import User
@@ -159,8 +160,18 @@ async def submit_requirements(
     req.is_submitted = True
     req.submitted_at = datetime.now(timezone.utc)
 
-    # Advance project status if still NEW
-    if project.status == ProjectStatus.NEW:
+    # Check if advance payment has already been verified
+    pay_stmt = select(Payment).where(
+        Payment.project_id == project.id,
+        Payment.status == PaymentStatus.SUCCESS,
+        Payment.payment_type.in_([PaymentType.ADVANCE, PaymentType.FULL]),
+    )
+    pay_res = await db.execute(pay_stmt)
+    has_advance = pay_res.scalar_one_or_none() is not None
+
+    if has_advance:
+        project.status = ProjectStatus.PENDING_APPROVAL
+    elif project.status == ProjectStatus.NEW:
         project.status = ProjectStatus.REQUIREMENTS_PENDING
 
     await db.commit()
